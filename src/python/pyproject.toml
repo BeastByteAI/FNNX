@@ -1,6 +1,6 @@
 [project]
 name = "fnnx"
-version = "0.0.6"
+version = "0.0.7"
 description = "A flexible ML packaging standard."
 authors = [
     { name = "Oleh Kostromin", email = "oleh@beastbyte.ai" }

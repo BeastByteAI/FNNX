@@ -4,6 +4,8 @@ import argparse
 import asyncio
 import json
 import sys
+import threading
+import os
 from typing import Callable
 from concurrent.futures import ThreadPoolExecutor
 from fnnx.runtime import Runtime
@@ -20,9 +22,32 @@ except Exception:  # pragma: no cover
     _np = None
 
 
+class ProtocolWriter:
+    def __init__(self, fd: int):
+        self._fd = fd
+        self._lock = threading.Lock()
+
+    def write_message(self, message: str):
+        with self._lock:
+            data = (message + "\n").encode("utf-8")
+            os.write(self._fd, data)
+
+
+def _create_protocol_writer() -> ProtocolWriter:
+    original_stdout_fd = os.dup(1)
+    os.dup2(2, 1)
+    return ProtocolWriter(original_stdout_fd)
+
+
 class StdIOServer:
-    def __init__(self, handlers: dict[str, Callable], num_threads: int = 1):
+    def __init__(
+        self,
+        handlers: dict[str, Callable],
+        protocol_writer: ProtocolWriter,
+        num_threads: int = 1,
+    ):
         self.handlers = handlers
+        self.protocol_writer = protocol_writer
         self.num_threads = num_threads
         self.executor = ThreadPoolExecutor(max_workers=num_threads)
 
@@ -37,7 +62,7 @@ class StdIOServer:
                 raise ValueError(f"Unknown handler {handler}")
 
             result = self.handlers[handler](body)
-            print(
+            self.protocol_writer.write_message(
                 json.dumps(
                     {
                         "id": rid,
@@ -46,10 +71,9 @@ class StdIOServer:
                         "type": "fnnx_stdio_response",
                     }
                 ),
-                flush=True,
             )
         except Exception as e:
-            print(
+            self.protocol_writer.write_message(
                 json.dumps(
                     {
                         "id": rid,
@@ -58,7 +82,6 @@ class StdIOServer:
                         "type": "fnnx_stdio_response",
                     }
                 ),
-                flush=True,
             )
 
     def loop(self):
@@ -99,6 +122,7 @@ def _to_jsonable(o):
 
 
 def main():
+    protocol_writer = _create_protocol_writer()
     args = _parse_args()
     _device_map_obj = None
     if args.device_map:
@@ -142,13 +166,10 @@ def main():
 
     StdIOServer(
         {"compute": rt_compute, "compute_async": rt_compute_async},
+        protocol_writer=protocol_writer,
         num_threads=args.worker_num_threads,
     ).loop()
 
 
 if __name__ == "__main__":
-    print("Starting FNNX StdIO worker", flush=True)
-    import os
-
-    print(os.getenv("FNNX_PASS_TEST", "not set"), flush=True)
     main()
