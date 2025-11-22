@@ -1,0 +1,26 @@
+{
+    "name": "@fnnx/web",
+    "version": "0.1.3",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "test": "vitest",
+        "clean": "rm -rf dist"
+    },
+    "dependencies": {
+        "@fnnx/common": "workspace:*",
+        "onnxruntime-web": "^1.20.1"
+    },
+    "files": [
+        "dist"
+    ],
+    "devDependencies": {
+        "@playwright/test": "^1.56.1",
+        "http-server": "^14.1.1",
+        "jsdom": "^27.0.1",
+        "vitest": "^1.6.0"
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "name": "fnnx",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "pnpm -r build",
+        "dev": "pnpm -r --parallel run dev",
+        "test": "pnpm -r test",
+        "lint": "pnpm -r lint",
+        "clean": "pnpm -r clean",
+        "play": "node --loader ts-node/esm pg_run.ts"
+    },
+    "devDependencies": {
+        "@types/node": "^20.17.10",
+        "eslint": "^9.17.0",
+        "prettier": "^3.4.2",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.7.2",
+        "vitest": "^1.6.0"
+    },
+    "dependencies": {
+        "@fnnx/common": "workspace:*",
+        "@fnnx/web": "workspace:*",
+        "@fnnx/node": "workspace:*"
+    }
+}
