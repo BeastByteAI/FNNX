@@ -11,9 +11,9 @@ class Runtime:
         handler: Type[BaseHandler] | None = None,
         handler_config: Any = None,
         device_map: str | DeviceMap | None = None,
-        cleanup: bool = True,
+        *args,
+        **kwargs,
     ):
-        self.cleanup = cleanup
         if handler is None:
             handler = LocalHandler
             handler_config = (
