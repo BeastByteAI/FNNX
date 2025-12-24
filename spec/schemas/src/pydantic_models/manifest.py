@@ -30,7 +30,6 @@ class Var(BaseModel):
 
 
 class Manifest(BaseModel):
-
     variant: str
 
     name: str | None = None
