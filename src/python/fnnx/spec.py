@@ -1,6 +1,6 @@
 # This file is auto generated and must not be modified manually!
 schema = {
-    "version": "0.0.3",
+    "version": "0.0.4",
     "manifest": {
         "$defs": {
             "JSON": {
@@ -326,6 +326,20 @@ schema = {
                         "onnx_ir_version": {
                             "title": "Onnx Ir Version",
                             "type": "integer",
+                        },
+                        "used_operators": {
+                            "anyOf": [
+                                {
+                                    "additionalProperties": {
+                                        "items": {"type": "string"},
+                                        "type": "array",
+                                    },
+                                    "type": "object",
+                                },
+                                {"type": "null"},
+                            ],
+                            "default": None,
+                            "title": "Used Operators",
                         },
                     },
                     "required": [
