@@ -1,5 +1,7 @@
 import json
 import subprocess
+import os
+import shutil
 from pydantic_models.op_instances import OpInstances
 from pydantic_models.manifest import Manifest
 from pydantic_models.variants.pipeline import PipelineVariant
@@ -73,3 +75,38 @@ with open(spec_py_path, "w") as f:
     f.write("# This file is auto generated and must not be modified manually!\n")
     f.write(f"schema = {combined_json_schema}")
 subprocess.run(["black", spec_py_path])
+
+
+HEADER_TEXT = (
+    "# ==============================================================\n"
+    "# This file was automatically copied from spec.\n"
+    "# DO NOT EDIT — changes here will be overwritten.\n"
+    "# ==============================================================\n\n"
+)
+
+
+def copy_with_header(src_dir, dst_dir, header_text=HEADER_TEXT):
+    for root, _, files in os.walk(src_dir):
+        rel_path = os.path.relpath(root, src_dir)
+        dst_root = os.path.join(dst_dir, rel_path)
+        os.makedirs(dst_root, exist_ok=True)
+
+        for f in files:
+            if f.endswith(".py"):
+                src_path = os.path.join(root, f)
+                dst_path = os.path.join(dst_root, f)
+
+                with open(src_path, "r", encoding="utf-8") as s:
+                    original = s.read()
+
+                with open(dst_path, "w", encoding="utf-8") as d:
+                    d.write(HEADER_TEXT + original)
+            elif f.endswith(".pyc"):
+                pass
+            else:
+                shutil.copy2(os.path.join(root, f), os.path.join(dst_root, f))
+
+
+copy_with_header(
+    "./pydantic_models", "./../../../src/python/fnnx/extras/pydantic_models"
+)
