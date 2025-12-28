@@ -16,4 +16,4 @@ classifiers = [
 [project.optional-dependencies]
 core = ["numpy>=1.0.0,<3.0.0", "onnxruntime>=1.0.0,<2.0.0"]
 extras = ["pydantic>=2.0.0,<3.0.0"]
-test = ["jsonschema>=4.0.0,<5.0.0"]
+test = ["jsonschema>=4.0.0,<5.0.0", "pydantic>=2.0.0,<3.0.0"]
