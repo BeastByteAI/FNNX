@@ -1,15 +1,33 @@
 from fnnx.variants._base import BaseVariant, OpInstance
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
+import sys
 from dataclasses import dataclass
 from os.path import join as pjoin, relpath
 from os import walk
 from threading import Lock
-import sys
 import importlib.util
 import uuid
 from typing import Type
 
 _pyfunc_lock = Lock()
+
+
+@contextmanager
+def temp_sys_path(extra_modules_path: str, lock):
+    with lock:
+        sys.path.insert(0, extra_modules_path)
+        original_modules = set(sys.modules.keys())
+        try:
+            yield
+        finally:
+            for name in set(sys.modules.keys()) - original_modules:
+                mod = sys.modules.get(name)
+                if mod and (getattr(mod, "__file__", "") or "").startswith(
+                    extra_modules_path
+                ):
+                    sys.modules.pop(name, None)
+            sys.path.pop(0)
 
 
 class Context:
@@ -97,36 +115,26 @@ class PyFuncVariant(BaseVariant):
 
     def warmup(self):
         super().warmup()
-        self.pyfunc.warmup()
+        with temp_sys_path(
+            pjoin(self.model_path, "variant_artifacts", "extra_modules"), _pyfunc_lock
+        ):
+            self.pyfunc.warmup()
         return self
 
     def get_pyfunc(self) -> Type[PyFunc]:
         unique_module_name = f"temp_module_{uuid.uuid4().hex}"
-        extra_modules_path = pjoin(
-            self.model_path, "variant_artifacts", "extra_modules"
-        )
-        with _pyfunc_lock:
-            sys.path.insert(0, extra_modules_path)
-            new_modules = set()
-            try:
-                spec = importlib.util.spec_from_file_location(
-                    unique_module_name, self.pyfunc_file_path
-                )
-                if spec is None or spec.loader is None:
-                    raise ValueError(f"Could not load {self.pyfunc_file_path}")
-                module = importlib.util.module_from_spec(spec)
-                original_modules = set(sys.modules.keys())
-                spec.loader.exec_module(module)
-                new_modules.update(set(sys.modules.keys()) - original_modules)
-                cls = getattr(module, self.pyfunc_classname)
-            finally:
-                for module_name in new_modules:
-                    module = sys.modules.get(module_name)
-                    if module and (getattr(module, "__file__", "") or "").startswith(
-                        extra_modules_path
-                    ):
-                        sys.modules.pop(module_name, None)
-                sys.path.pop(0)
+        with temp_sys_path(
+            pjoin(self.model_path, "variant_artifacts", "extra_modules"), _pyfunc_lock
+        ):
+            spec = importlib.util.spec_from_file_location(
+                unique_module_name, self.pyfunc_file_path
+            )
+            if spec is None or spec.loader is None:
+                raise ValueError(f"Could not load {self.pyfunc_file_path}")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            cls = getattr(module, self.pyfunc_classname)
+
         if not issubclass(cls, PyFunc):
             raise ValueError(f"Class {cls} is not a subclass of PyFunc")
         return cls
