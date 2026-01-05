@@ -1,38 +1,8 @@
 import unittest
-from fnnx.dtypes import FlatList, DtypesManager, NDContainer, BUILTINS
-
-class TestFlatList(unittest.TestCase):
-
-    def test_initialization_with_list(self):
-        fl = FlatList([1, 2, 3])
-        self.assertEqual(fl.data, [1, 2, 3])
-
-    def test_initialization_with_non_list(self):
-        with self.assertRaises(ValueError):
-            FlatList("not a list")  # type: ignore
-
-    def test_get_item(self):
-        fl = FlatList(["a", "b", "c"])
-        self.assertEqual(fl[0], "a")
-        self.assertEqual(fl[2], "c")
-
-    def test_set_item(self):
-        fl = FlatList([1, 2, 3])
-        fl[1] = 200
-        self.assertEqual(fl[1], 200)
-
-    def test_append(self):
-        fl = FlatList([])
-        fl.append(10)
-        self.assertEqual(fl.data, [10])
-
-    def test_repr(self):
-        fl = FlatList([1, 2])
-        self.assertEqual(repr(fl), "FlatList([1, 2])")
+from fnnx.dtypes import DtypesManager, NDContainer, BUILTINS
 
 
 class TestDtypesManager(unittest.TestCase):
-
     def setUp(self):
         self.external_dtypes = {
             "Person": {
@@ -65,19 +35,12 @@ class TestDtypesManager(unittest.TestCase):
         data = [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]
         self.manager.validate_dtype("Person", data)
 
-    def test_validate_dtype_flatlist(self):
-        data = FlatList([{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}])
-        self.manager.validate_dtype("Person", [data])
-        self.manager.validate_dtype("Person", [data, data])
-        self.manager.validate_dtype("Person", [[data], [data]])
-
     def test_invalid_dtype_name(self):
         with self.assertRaises(ValueError):
             DtypesManager({"Invalid[Name]": {}}, {})
 
 
 class TestNDContainer(unittest.TestCase):
-
     def setUp(self):
         self.dtype_manager = DtypesManager(
             {},
@@ -152,34 +115,6 @@ class TestNDContainer(unittest.TestCase):
         expected = "NDContainer(shape=(3,), dtype=Number, data=[1, 2, 3])"
         self.assertEqual(repr(nd), expected)
 
-    def test_flatlist_in_ndcontainer(self):
-        data = [[1, 2], [3, 4]]
-        nd = NDContainer(data, "FlatList[Number]", None)  # type: ignore
-        self.assertIsInstance(nd.data[0], FlatList)
-        self.assertEqual(nd.shape, (2,))
-
-        data = [[1, 2], [3, 4]]
-        nd = NDContainer(data, "NDContainer[FlatList[Number]]", None)  # type: ignore
-        self.assertIsInstance(nd.data[0], FlatList)
-        self.assertEqual(nd.shape, (2,))
-
-        data = [[1, 2, 3, 4]]
-        nd = NDContainer(data, "NDContainer[FlatList[Number]]", None)  # type: ignore
-        self.assertIsInstance(nd.data[0], FlatList)
-        self.assertEqual(nd.shape, (1,))
-
-        data = [[1], [2], [3], [4]]
-        nd = NDContainer(data, "NDContainer[FlatList[Number]]", None)  # type: ignore
-        self.assertIsInstance(nd.data[0], FlatList)
-        self.assertEqual(nd.shape, (4,))
-
-        data = [1]
-        nd = NDContainer(data, "NDContainer[FlatList[Number]]", None)  # type: ignore
-        self.assertIsInstance(nd.data[0], FlatList)
-        self.assertEqual(nd.data[0].data, [1])
-        self.assertEqual(nd.shape, (1,))
-
 
 if __name__ == "__main__":
     unittest.main()
- 

@@ -25,6 +25,9 @@ from fnnx.ops._base import BaseOp
 from fnnx.variants._base import BaseVariant
 
 
+_VARIANT_CLASSES = {"pipeline": Pipeline, "pyfunc": PyFuncVariant}
+
+
 @dataclass
 class LocalHandlerConfig(BaseHandlerConfig):
     n_workers: int = 1
@@ -57,26 +60,19 @@ class LocalHandler(BaseHandler):
             # passing model_path and not self.model_path to avoid reference on self
             atexit.register(lambda: _cleanup(model_path))
 
-        with open(pjoin(self.model_path, "manifest.json"), "r") as f:
-            self.manifest = json.load(f)
-            validate_manifest(self.manifest)
+        self.manifest = self._load_json_config("manifest.json")
+        validate_manifest(self.manifest)
+        self.input_specs = {spec["name"]: spec for spec in self.manifest["inputs"]}
+        self.output_specs = {spec["name"]: spec for spec in self.manifest["outputs"]}
 
-            self.input_specs = {spec["name"]: spec for spec in self.manifest["inputs"]}
-            self.output_specs = {
-                spec["name"]: spec for spec in self.manifest["outputs"]
-            }
+        self.ops = self._load_json_config("ops.json")
+        validate_op_instances(self.ops)
 
-        with open(pjoin(self.model_path, "ops.json"), "r") as f:
-            self.ops = json.load(f)
-            validate_op_instances(self.ops)
+        self.variant_config = self._load_json_config("variant_config.json")
+        validate_variant(self.manifest["variant"], self.variant_config)
 
-        with open(pjoin(self.model_path, "variant_config.json"), "r") as f:
-            self.variant_config = json.load(f)
-            validate_variant(self.manifest["variant"], self.variant_config)
-
-        with open(pjoin(self.model_path, "dtypes.json"), "r") as f:
-            external_dtypes = json.load(f)
-            self.dtypes_manager = DtypesManager(external_dtypes, BUILTINS)
+        external_dtypes = self._load_json_config("dtypes.json")
+        self.dtypes_manager = DtypesManager(external_dtypes, BUILTINS)
 
         self.variant = self.manifest.get("variant")
 
@@ -86,11 +82,8 @@ class LocalHandler(BaseHandler):
             for op_name, op in handler_config.extra_ops.items():
                 registry.register_op(op, op_name)
 
-        if self.variant == "pipeline":
-            vcls = Pipeline
-        elif self.variant == "pyfunc":
-            vcls = PyFuncVariant
-        else:
+        vcls = _VARIANT_CLASSES.get(self.variant)
+        if vcls is None:
             raise ValueError(f"Unknown variant: {self.variant}")
 
         self.executor = ThreadPoolExecutor(max_workers=handler_config.n_workers)
@@ -106,6 +99,11 @@ class LocalHandler(BaseHandler):
             op_executor=self.op_executor,
         ).warmup()
 
+    def _load_json_config(self, filename: str):
+        """Load and return JSON config from model path."""
+        with open(pjoin(self.model_path, filename), "r") as f:
+            return json.load(f)
+
     def _as_np(self, data, spec):
         if np is None:
             raise RuntimeError("You must have numpy installed to use Array dtype")
@@ -114,31 +112,35 @@ class LocalHandler(BaseHandler):
             return np.asarray(data).astype(np.str_)
         return np.asarray(data).astype(dtype)
 
+    def _prepare_ndjson_input(self, input, spec):
+        if "NDContainer[" in spec["dtype"]:
+            if not isinstance(input, NDContainer):
+                return NDContainer(
+                    input,
+                    dtype=spec["dtype"],
+                    dtypes_manager=self.dtypes_manager,
+                )
+            return input
+        elif "Array[" in spec["dtype"]:
+            return self._as_np(input, spec)
+        else:
+            raise ValueError(f"Unknown dtype {spec['dtype']}")
+
+    def _prepare_json_input(self, input, spec):
+        if self.variant == "pipeline":
+            raise ValueError("Pipeline variant does not support JSON inputs")
+        dtype = spec["dtype"]
+        self.dtypes_manager.validate_jsonschema(dtype, input)
+        return input
+
     def _prepare_inputs(self, inputs):
         prepared_inputs = {}
         for name, input in inputs.items():
             spec = self.input_specs[name]
             if spec["content_type"] == "NDJSON":
-                if "NDContainer[" in spec["dtype"]:
-                    if not isinstance(input, NDContainer):
-                        prepared_inputs[name] = NDContainer(
-                            input,
-                            dtype=spec["dtype"],
-                            dtypes_manager=self.dtypes_manager,
-                        )
-                    else:
-                        prepared_inputs[name] = input
-                elif "Array[" in spec["dtype"]:
-                    prepared_inputs[name] = self._as_np(input, spec)
-                else:
-                    raise ValueError(f"Unknown dtype {spec['dtype']}")
-            elif spec["content_type"] == "JSON" and self.variant != "pipeline":
-                if "Array[" in spec["dtype"]:
-                    prepared_inputs[name] = self._as_np(input, spec)
-                else:
-                    dtype = spec["dtype"]
-                    self.dtypes_manager.validate_dtype(dtype, input)
-                    prepared_inputs[name] = input
+                prepared_inputs[name] = self._prepare_ndjson_input(input, spec)
+            elif spec["content_type"] == "JSON":
+                prepared_inputs[name] = self._prepare_json_input(input, spec)
             else:
                 raise ValueError(f"Unknown input type {spec['content_type']}")
         return prepared_inputs
