@@ -7,13 +7,14 @@ from fnnx.envs._common import select_pip_deps
 from fnnx.console import console
 from fnnx.utils import get_python_version
 from fnnx.envs._common import which
+from fnnx.envs.base import BaseEnvManager
 import shutil
 import platform
 import subprocess
 import tempfile
 
 
-class CondaLikeEnvManager:
+class CondaLikeEnvManager(BaseEnvManager):
     def __init__(self, env_spec: dict, accelerator: str | None = None):
         self._exe = self._get_exe()
         self.env_spec = env_spec

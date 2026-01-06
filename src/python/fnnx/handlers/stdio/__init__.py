@@ -11,6 +11,7 @@ from fnnx.validators.model_schema import (
 from fnnx.handlers._base import BaseHandler, BaseHandlerConfig
 from fnnx.device import DeviceMap
 from fnnx.dtypes import BUILTINS, DtypesManager, NDContainer
+from fnnx.envs.base import BaseEnvManager
 from fnnx.envs.conda import CondaLikeEnvManager
 from fnnx.utils import to_thread
 
@@ -34,6 +35,7 @@ class StdIOHandlerConfig(BaseHandlerConfig):
     request_timeout_s: float | None = None
     auto_cleanup: bool = True
     worker_num_threads: int = 1
+    env_manager: type[BaseEnvManager] | str = CondaLikeEnvManager  # if str -> import
 
 
 class StdIOHandler(BaseHandler):
@@ -80,7 +82,19 @@ class StdIOHandler(BaseHandler):
                 raw_env_spec = json.load(f)
         conda_like_spec = raw_env_spec.get("python3::conda_pip", raw_env_spec or {})
 
-        mngr = CondaLikeEnvManager(conda_like_spec, accelerator=device_map.accelerator)
+        if isinstance(self.handler_config.env_manager, str):
+            import importlib
+
+            module_name, class_name = self.handler_config.env_manager.rsplit(".", 1)
+            module = importlib.import_module(module_name)
+            EnvMngrClass: type[BaseEnvManager] = getattr(module, class_name)
+        else:
+            EnvMngrClass = self.handler_config.env_manager
+
+        if not issubclass(EnvMngrClass, BaseEnvManager):
+            raise ValueError("env_manager must be a subclass of BaseEnvManager")
+
+        mngr = EnvMngrClass(conda_like_spec, accelerator=device_map.accelerator)
 
         mngr.ensure()
         device_map_payload = {
@@ -100,7 +114,7 @@ class StdIOHandler(BaseHandler):
                 str(self.handler_config.worker_num_threads),
             ]
         )
-        
+
         self._client = StdIOClient(cmd)
 
         self._executor = ThreadPoolExecutor(max_workers=1)
