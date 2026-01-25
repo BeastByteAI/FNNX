@@ -61,6 +61,7 @@ export class TarExtractor {
         const view = new Uint8Array(this.buffer, dataStart, size);
         let i = 0;
         while (i < view.length) {
+            const recStartDigits = i;
             // Read record length (digits followed by space)
             let lenStr = '';
             while (i < view.length && view[i] !== 0x20) {
@@ -69,11 +70,10 @@ export class TarExtractor {
             if (i >= view.length) break;
             const recLen = parseInt(lenStr, 10);
             i++; // skip space
-            const recStartDigits = i - lenStr.length - 1;
             const recTotalEnd = recStartDigits + recLen;
             const recContentEnd = recTotalEnd - 1; // exclude trailing newline
-            if (recTotalEnd > view.length + recStartDigits || recContentEnd < i) break;
-            const line = new TextDecoder('utf-8').decode(view.slice(i, recStartDigits + recLen - 1));
+            if (recTotalEnd > view.length || recContentEnd < i) break;
+            const line = new TextDecoder('utf-8').decode(view.slice(i, recContentEnd));
             const eq = line.indexOf('=');
             if (eq !== -1) {
                 const key = line.slice(0, eq);
@@ -82,9 +82,7 @@ export class TarExtractor {
                     this.pendingPaxPath = val;
                 }
             }
-            i = recTotalEnd - recStartDigits + i - lenStr.length - 1;
-            // Simpler: just advance to next record
-            i = recStartDigits + recLen;
+            i = recTotalEnd;
         }
     }
 
