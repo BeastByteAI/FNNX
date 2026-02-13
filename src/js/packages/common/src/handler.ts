@@ -113,7 +113,15 @@ export class LocalHandler {
 
             if (spec.content_type === 'NDJSON') {
                 if (spec.dtype.startsWith('NDContainer[')) {
-                    throw new Error('NDContainer support is not implemented yet');
+                    if (input instanceof NDContainer) {
+                        preparedInputs[name] = input;
+                    } else {
+                        preparedInputs[name] = new NDContainer(
+                            input,
+                            spec.dtype,
+                            this.dtypesManager
+                        );
+                    }
                 } else if (spec.dtype.startsWith('Array[')) {
                     if (!(input instanceof NDArray)) {
                         throw new Error(`Input ${name} must be an NDArray`);
@@ -128,9 +136,13 @@ export class LocalHandler {
                     throw new Error(`Invalid NDJSON dtype: ${spec.dtype}. Must be Array[...] or NDContainer[...]`);
                 }
             } else if (spec.content_type === 'JSON') {
-                throw new Error('JSON input support is not implemented yet');
-            }
-            else {
+                if (this.variant === 'pipeline') {
+                    throw new Error('Pipeline variant does not support JSON inputs');
+                }
+                const dtype = spec.dtype;
+                this.dtypesManager.validateJsonSchema(dtype, input);
+                preparedInputs[name] = input;
+            } else {
                 throw new Error(`Unknown content type: ${spec["content_type"]}`);
             }
         }

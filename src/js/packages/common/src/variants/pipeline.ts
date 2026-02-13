@@ -2,7 +2,8 @@ import { BaseVariant } from './base';
 import { DagComponent, dagCompute } from './common/dag';
 import { OpIO, TarFileContent, DeviceMap, OpInstanceConfig } from '../interfaces';
 import Registry from '../registry';
-import { DtypesManager } from '../ndarray';
+import { DtypesManager, NDContainer } from '../ndarray';
+import { NDArray } from '../ndarray';
 import { BaseOp } from '../ops/base';
 
 interface PipelineNode {
@@ -77,12 +78,38 @@ export class Pipeline extends BaseVariant {
         });
     }
 
+    private validateInputs(inputs: any[], inputSpecs: OpIO[]): void {
+        for (let i = 0; i < inputSpecs.length; i++) {
+            const spec = inputSpecs[i];
+            const input = inputs[i];
+            if (input === undefined || input === null) continue;
+
+            const inputShape: number[] | undefined = input.shape;
+            if (!inputShape || spec.shape.length === 0) continue;
+
+            if (spec.shape.length !== inputShape.length) {
+                throw new Error(
+                    `Expected input shape [${spec.shape}], got [${inputShape}]`
+                );
+            }
+            for (let d = 0; d < spec.shape.length; d++) {
+                const specDim = spec.shape[d];
+                if (typeof specDim === "string") continue;
+                if (specDim !== inputShape[d]) {
+                    throw new Error(
+                        `Expected input shape [${spec.shape}], got [${inputShape}]`
+                    );
+                }
+            }
+        }
+    }
+
     private async nodeCompute(
         nodeInstance: PipelineNodeInstance,
         nodeInputs: any[],
         passthrough: Record<string, any>
     ): Promise<any> {
-        // validateInputs(nodeInputs, nodeInstance.inputSpecs); // TODO
+        this.validateInputs(nodeInputs, nodeInstance.inputSpecs);
         return await nodeInstance.operator.compute(nodeInputs, passthrough.dynamic_attributes);
     }
 
