@@ -131,10 +131,112 @@ export class NDArray {
 }
 
 
-export class DtypesManager {
+const RESERVED_TYPES = ["string", "integer", "float", "Array", "NDContainer"];
 
+export class DtypesManager {
+    private dtypes: Record<string, object>;
+
+    constructor(externalDtypes: Record<string, object> = {}) {
+        this.dtypes = { ...externalDtypes };
+
+        for (const dtype of Object.keys(this.dtypes)) {
+            if (dtype.includes("[")) {
+                throw new Error(`Invalid dtype name: ${dtype}`);
+            }
+        }
+        for (const reserved of RESERVED_TYPES) {
+            if (reserved in this.dtypes) {
+                throw new Error(`Invalid dtype name: ${reserved}`);
+            }
+        }
+    }
+
+    getDtype(name: string): object {
+        if (!(name in this.dtypes)) {
+            throw new Error(`Unknown dtype: ${name}`);
+        }
+        return this.dtypes[name];
+    }
+
+    validateDtype(name: string, data: unknown): void {
+        if (Array.isArray(data)) {
+            for (const d of data) {
+                this.validateDtype(name, d);
+            }
+        } else if (typeof data === "object" && data !== null) {
+            this.validateJsonSchema(name, data as Record<string, unknown>);
+        } else if (typeof data === "string") {
+            if (name !== "string") {
+                throw new TypeError(`Invalid data type, expected \`string\`, got \`${name}\``);
+            }
+        } else if (typeof data === "number" && Number.isInteger(data)) {
+            if (name !== "integer") {
+                throw new TypeError(`Invalid data type, expected \`integer\`, got \`${name}\``);
+            }
+        } else if (typeof data === "number") {
+            if (name !== "float") {
+                throw new TypeError(`Invalid data type, expected \`float\`, got \`${name}\``);
+            }
+        } else {
+            throw new TypeError(`Invalid data type: ${typeof data}`);
+        }
+    }
+
+    validateJsonSchema(name: string, data: Record<string, unknown>): void {
+        const schema = this.getDtype(name);
+        if (typeof schema !== "object" || schema === null) {
+            throw new Error(`Invalid schema for dtype: ${name}`);
+        }
+        // Basic JSON schema validation: check required properties and types
+        const s = schema as Record<string, any>;
+        if (s.type === "object" && s.properties) {
+            if (s.required) {
+                for (const req of s.required as string[]) {
+                    if (!(req in data)) {
+                        throw new Error(`Missing required property: ${req}`);
+                    }
+                }
+            }
+        }
+    }
 }
 
 export class NDContainer {
+    public readonly shape: number[];
+    public readonly data: unknown[];
+    private readonly _dtype: string;
+    private readonly dtypesManager: DtypesManager | null;
 
+    constructor(data: unknown, dtype: string, dtypesManager: DtypesManager | null = null) {
+        if (dtype.startsWith("Array[")) {
+            throw new Error("NDContainer does not support Array dtype");
+        }
+        if (dtype.startsWith("NDContainer[")) {
+            dtype = dtype.slice(12, -1);
+        }
+
+        this.data = Array.isArray(data) ? structuredClone(data) : [structuredClone(data)];
+
+        if (dtypesManager) {
+            dtypesManager.validateDtype(dtype, this.data);
+        }
+        this.dtypesManager = dtypesManager;
+        this._dtype = dtype;
+        this.shape = this.computeShape(this.data);
+    }
+
+    get dtype(): string {
+        return this._dtype;
+    }
+
+    private computeShape(data: unknown): number[] {
+        if (!Array.isArray(data) || data.length === 0) {
+            return [];
+        }
+        return [data.length, ...this.computeShape(data[0])];
+    }
+
+    toArray(): unknown[] {
+        return structuredClone(this.data);
+    }
 }
