@@ -1,6 +1,6 @@
 {
-    "name": "@fnnx/web",
-    "version": "0.2.0",
+    "name": "@fnnx-ai/web",
+    "version": "0.0.1",
     "type": "module",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -11,7 +11,7 @@
         "clean": "rm -rf dist"
     },
     "dependencies": {
-        "@fnnx/common": "workspace:*",
+        "@fnnx-ai/common": "workspace:*",
         "onnxruntime-web": "^1.20.1"
     },
     "files": [

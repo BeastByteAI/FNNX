@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyPatches } from "@fnnx/common";
+import { applyPatches } from "@fnnx-ai/common";
 
 describe("applyPatches", () => {
     describe("add operation", () => {

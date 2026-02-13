@@ -16,8 +16,8 @@ const testHTML = `
     <script type="importmap">
     {
       "imports": {
-        "@fnnx/common": "/dist/common/index.js",
-        "@fnnx/web": "/dist/web/index.js"
+        "@fnnx-ai/common": "/dist/common/index.js",
+        "@fnnx-ai/web": "/dist/web/index.js"
       }
     }
     </script>

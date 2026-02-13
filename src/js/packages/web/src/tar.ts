@@ -1,4 +1,4 @@
-import { interfaces } from "@fnnx/common";
+import { interfaces } from "@fnnx-ai/common";
 
 export class TarExtractor {
     private offset = 0;

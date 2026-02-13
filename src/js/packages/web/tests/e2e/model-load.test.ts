@@ -17,8 +17,8 @@ const testHTML = `
     <script type="importmap">
     {
       "imports": {
-        "@fnnx/common": "/dist/common/index.js",
-        "@fnnx/web": "/dist/web/index.js",
+        "@fnnx-ai/common": "/dist/common/index.js",
+        "@fnnx-ai/web": "/dist/web/index.js",
         "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"
       }
     }

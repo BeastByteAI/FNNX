@@ -1,4 +1,4 @@
-import { BaseOp, interfaces, DtypesManager, NDArray, ArrayDType } from "@fnnx/common";
+import { BaseOp, interfaces, DtypesManager, NDArray, ArrayDType } from "@fnnx-ai/common";
 import * as ort from "onnxruntime-web";
 
 

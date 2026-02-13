@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Model } from "../src/model";
-import { NDArray } from "@fnnx/common";
+import { NDArray } from "@fnnx-ai/common";
 import { TarExtractor } from "../src/tar";
 
 const __filename = fileURLToPath(import.meta.url);

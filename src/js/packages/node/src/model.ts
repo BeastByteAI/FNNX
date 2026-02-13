@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { interfaces, LocalHandler, DtypesManager, Inputs, Outputs, DynamicAttributes, applyPatches } from "@fnnx/common";
+import { interfaces, LocalHandler, DtypesManager, Inputs, Outputs, DynamicAttributes, applyPatches } from "@fnnx-ai/common";
 import { TarExtractor } from "./tar.js";
 import { ONNXOpV1 } from "./ops.js";
 
