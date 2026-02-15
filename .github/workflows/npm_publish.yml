@@ -76,8 +76,38 @@ jobs:
         working-directory: src/js
         run: pnpm build
 
-      - name: Publish
+      - name: Publish @fnnx-ai/common
         working-directory: src/js
-        run: pnpm -r publish --access public --no-git-checks
+        run: |
+          VERSION=$(node -p "require('./packages/common/package.json').version")
+          if npm view @fnnx-ai/common@$VERSION version 2>/dev/null; then
+            echo "common@$VERSION already published, skipping"
+          else
+            pnpm --filter @fnnx-ai/common publish --access public --no-git-checks
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @fnnx-ai/web
+        working-directory: src/js
+        run: |
+          VERSION=$(node -p "require('./packages/web/package.json').version")
+          if npm view @fnnx-ai/web@$VERSION version 2>/dev/null; then
+            echo "web@$VERSION already published, skipping"
+          else
+            pnpm --filter @fnnx-ai/web publish --access public --no-git-checks
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @fnnx-ai/node
+        working-directory: src/js
+        run: |
+          VERSION=$(node -p "require('./packages/node/package.json').version")
+          if npm view @fnnx-ai/node@$VERSION version 2>/dev/null; then
+            echo "node@$VERSION already published, skipping"
+          else
+            pnpm --filter @fnnx-ai/node publish --access public --no-git-checks
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

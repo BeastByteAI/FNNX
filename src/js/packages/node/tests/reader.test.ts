@@ -3,7 +3,6 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Model } from "../src/model";
-import { TarExtractor } from "../src/tar";
 
 function createTarEntry(fileName: string, content: string): Uint8Array {
     const contentBytes = new TextEncoder().encode(content);

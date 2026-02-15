@@ -1,8 +1,10 @@
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, mkdtempSync } from "node:fs";
+import { readFileSync, mkdirSync, readdirSync, statSync, rmSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { extract as tarExtract } from "tar";
 import { interfaces, LocalHandler, DtypesManager, Inputs, Outputs, DynamicAttributes, applyPatches } from "@fnnx-ai/common";
-import { TarExtractor } from "./tar.js";
 import { ONNXOpV1 } from "./ops.js";
 
 const MANIFEST_PATCH_PATTERN = /^manifest-[^/]+\.patch\.json$/;
@@ -44,16 +46,14 @@ export class Model {
             return new Model(modelPath, false);
         }
         const tempDir = mkdtempSync(path.join(tmpdir(), 'fnnx-'));
-        const fileBuffer = readFileSync(modelPath);
-        const arrayBuffer = toArrayBuffer(fileBuffer);
-        extractToDir(arrayBuffer, tempDir);
+        await tarExtract({ file: modelPath, C: tempDir });
         return new Model(tempDir, true);
     }
 
     static async fromBuffer(modelData: ArrayBuffer | Buffer): Promise<Model> {
         const tempDir = mkdtempSync(path.join(tmpdir(), 'fnnx-'));
-        const arrayBuffer = Buffer.isBuffer(modelData) ? toArrayBuffer(modelData) : modelData;
-        extractToDir(arrayBuffer, tempDir);
+        const buf = Buffer.isBuffer(modelData) ? modelData : Buffer.from(modelData);
+        await extractToDir(buf, tempDir);
         return new Model(tempDir, true);
     }
 
@@ -135,25 +135,9 @@ export class Model {
     }
 }
 
-function toArrayBuffer(buf: Buffer): ArrayBuffer {
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-}
-
-function extractToDir(tarBuffer: ArrayBuffer, targetDir: string): void {
-    const extractor = new TarExtractor(tarBuffer);
-    const files = extractor.extract();
-
-    for (const file of files) {
-        const targetPath = path.join(targetDir, file.relpath);
-        if (file.type === 'directory') {
-            mkdirSync(targetPath, { recursive: true });
-        } else {
-            mkdirSync(path.dirname(targetPath), { recursive: true });
-            if (file.content) {
-                writeFileSync(targetPath, file.content);
-            }
-        }
-    }
+async function extractToDir(tarBuffer: Buffer, targetDir: string): Promise<void> {
+    const readable = Readable.from(tarBuffer);
+    await pipeline(readable, tarExtract({ C: targetDir }));
 }
 
 function listModelFiles(dir: string): interfaces.TarFileContent[] {
