@@ -1,35 +1,20 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, cpSync } from "node:fs";
+import { readFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { extract as tarExtract } from "tar";
 import { Model } from "../src/model";
 import { NDArray } from "@fnnx-ai/common";
-import { TarExtractor } from "../src/tar";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const MODEL_PATH = path.resolve(__dirname, "../../../../python/tests/models/onnx_pipeline.fnnx.tar");
 
-function extractModelToDir(): string {
+async function extractModelToDir(): Promise<string> {
     const tempDir = mkdtempSync(path.join(tmpdir(), 'fnnx-test-'));
-    const buffer = readFileSync(MODEL_PATH);
-    const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-    const extractor = new TarExtractor(arrayBuffer);
-    const files = extractor.extract();
-
-    for (const file of files) {
-        const targetPath = path.join(tempDir, file.relpath);
-        if (file.type === 'directory') {
-            mkdirSync(targetPath, { recursive: true });
-        } else {
-            mkdirSync(path.dirname(targetPath), { recursive: true });
-            if (file.content) {
-                writeFileSync(targetPath, file.content);
-            }
-        }
-    }
+    await tarExtract({ file: MODEL_PATH, C: tempDir });
     return tempDir;
 }
 
@@ -56,8 +41,8 @@ describe("Model", () => {
     describe("loading from directory", () => {
         let modelDir: string;
 
-        beforeAll(() => {
-            modelDir = extractModelToDir();
+        beforeAll(async () => {
+            modelDir = await extractModelToDir();
         });
 
         it("should load from directory path", async () => {
