@@ -719,14 +719,14 @@ permissive `data` input) rather than per-column NDJSON.
         None` → no error, a skip warning is emitted, package still written. `pytest.importorskip("mlflow")`
         for (a)–(c).
 
-- [ ] **Task 5 — Broader end-to-end coverage (GenAI/custom, tensor, no-signature).**
-  - [ ] Integration tests in `src/python/tests/test_mlflow_variants.py`:
-        - [ ] Custom `mlflow.pyfunc.PythonModel` returning a dict (json `input_mode`, dict
+- [x] **Task 5 — Broader end-to-end coverage (GenAI/custom, tensor, no-signature).**
+  - [x] Integration tests in `src/python/tests/test_mlflow_variants.py`:
+        - [x] Custom `mlflow.pyfunc.PythonModel` returning a dict (json `input_mode`, dict
               output normalization) round-trips through `fnnx.Runtime`.
-        - [ ] A model with a `TensorSpec` signature (tensor `input_mode`) round-trips.
-        - [ ] A model saved without a signature (passthrough `input_mode`) round-trips and a
+        - [x] A model with a `TensorSpec` signature (tensor `input_mode`) round-trips.
+        - [x] A model saved without a signature (passthrough `input_mode`) round-trips and a
               warning is emitted.
-        - [ ] A params-schema model: assert `dynamic_attributes` mapping and that a passed
+        - [x] A params-schema model: assert `dynamic_attributes` mapping and that a passed
               dynamic attribute reaches `predict(..., params=...)`.
         `pytest.importorskip("mlflow")`.
 
