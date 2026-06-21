@@ -776,10 +776,10 @@ permissive `data` input) rather than per-column NDJSON.
         the `ds` datetime column), and that a round-trip forecast equals the model's own
         `predict` on the same future dataframe.
 
-- [ ] **Task 10 — TensorFlow/Keras named multi-input e2e (named tensor mode).**
-  - [ ] Add `tensorflow` to the `test` optional-dependency group in
+- [x] **Task 10 — TensorFlow/Keras named multi-input e2e (named tensor mode).**
+  - [x] Add `tensorflow` to the `test` optional-dependency group in
         `src/python/pyproject.toml`.
-  - [ ] Integration test in `src/python/tests/test_mlflow_tensorflow.py`
+  - [x] Integration test in `src/python/tests/test_mlflow_tensorflow.py`
         (`pytest.importorskip("tensorflow")` + mlflow): build a small Keras functional model
         with two named inputs `a`/`b` (`tf.random.set_seed`), `mlflow.tensorflow.save_model`
         with a TensorSpec signature carrying both names, `package_mlflow_model`, load via
