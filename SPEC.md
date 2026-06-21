@@ -653,26 +653,26 @@ permissive `data` input) rather than per-column NDJSON.
         `pytest.importorskip` only where a real mlflow object is needed (wrapper logic uses
         a fake model, so most tests need no mlflow).
 
-- [ ] **Task 2 — MLmodel reader (mlflow-optional) + mapping helpers in `fnnx/extras/mlflow.py`.**
-  - [ ] Define the `MLModelInfo` dataclass and `_load_model_info(local_dir)` with the two
+- [x] **Task 2 — MLmodel reader (mlflow-optional) + mapping helpers in `fnnx/extras/mlflow.py`.**
+  - [x] Define the `MLModelInfo` dataclass and `_load_model_info(local_dir)` with the two
         readers: `_load_model_info_mlflow` (preferred when `import mlflow` succeeds; normalize
         via `Model.load(...)` + `Schema.to_dict()`) and `_load_model_info_yaml` (offline
         fallback: `yaml.safe_load` the `MLmodel`, `json.loads` the signature strings). Both
         return the same normalized `signature_*` lists / `flavors` / `raw_mlmodel`.
-  - [ ] `_map_input_schema(signature_inputs: list[dict] | None) -> (specs, input_mode,
+  - [x] `_map_input_schema(signature_inputs: list[dict] | None) -> (specs, input_mode,
         cfg_fragment, warnings)` implementing the hybrid dispatch + dtype table on the
         normalized JSON entries (columns/tensor/json/passthrough, binary/datetime → json).
-  - [ ] `_map_params(signature_params: list[dict] | None) -> (list[Var], param_names)`.
-  - [ ] `_map_env(local_dir) -> (python_version, build_deps, runtime_deps)` parsing
+  - [x] `_map_params(signature_params: list[dict] | None) -> (list[Var], param_names)`.
+  - [x] `_map_env(local_dir) -> (python_version, build_deps, runtime_deps)` parsing
         `python_env.yaml` (via `yaml.safe_load`) + `requirements.txt` (skip
         comments/`-r`/`-c`/option lines). No mlflow.
-  - [ ] `_build_meta_payload(info: MLModelInfo, input_mode) -> dict` and a
+  - [x] `_build_meta_payload(info: MLModelInfo, input_mode) -> dict` and a
         `create_meta_callback` factory writing the `mlflow-source` `MetaEntry`.
-  - [ ] `_self_containment_warnings(info: MLModelInfo, local_dir) -> list[str]` per the
+  - [x] `_self_containment_warnings(info: MLModelInfo, local_dir) -> list[str]` per the
         heuristics table (reads `info.flavors`/`loader_module`).
-  - [ ] Register `ext::mlflow::input` / `ext::mlflow::output` permissive `{}` dtypes when
+  - [x] Register `ext::mlflow::input` / `ext::mlflow::output` permissive `{}` dtypes when
         json/passthrough modes are used.
-  - [ ] Tests in `src/python/tests/test_mlflow_mapping.py`: feed the mappers hand-built
+  - [x] Tests in `src/python/tests/test_mlflow_mapping.py`: feed the mappers hand-built
         signature JSON lists directly (columns/tensor/json/passthrough/binary-datetime, params)
         — **no mlflow needed**. Add synthetic temp dirs/files for `_map_env` and the
         self-containment heuristics, including the `mlflow.transformers` flavor with
