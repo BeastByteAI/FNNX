@@ -705,13 +705,13 @@ permissive `data` input) rather than per-column NDJSON.
         out)` (no `verify`) succeeds, produces a loadable package, and that a non-local
         `model_uri` under the same condition raises `ImportError`. Restore `sys.modules` after.
 
-- [ ] **Task 4 — Verification (`verify=True`) + input-example conversion.**
-  - [ ] Implement `MLflowPackagingVerificationError`, the `verify=True` smoke test with the
+- [x] **Task 4 — Verification (`verify=True`) + input-example conversion.**
+  - [x] Implement `MLflowPackagingVerificationError`, the `verify=True` smoke test with the
         mlflow precheck (if `mlflow` is not importable → warn and skip, build still succeeds),
         the Runtime load + optional input-example `compute`, and
         `_example_to_fnnx_inputs(example, input_mode, cfg)`. Load the input example via
         `mlflow.models.Model.load(local_dir).load_input_example(local_dir)`.
-  - [ ] Tests in `src/python/tests/test_mlflow_verify.py`: (a) sklearn model saved with an
+  - [x] Tests in `src/python/tests/test_mlflow_verify.py`: (a) sklearn model saved with an
         `input_example` → `verify=True` succeeds; (b) `_example_to_fnnx_inputs` unit tests
         for DataFrame/ndarray/dict/passthrough; (c) a model whose loader raises (simulate by
         an unimportable custom `PythonModel` / monkeypatched `load_model`) →

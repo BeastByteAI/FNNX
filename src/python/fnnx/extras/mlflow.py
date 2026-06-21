@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -32,6 +33,16 @@ _PERMISSIVE_INPUT_DTYPE = "ext::mlflow::input"
 _PERMISSIVE_OUTPUT_DTYPE = "ext::mlflow::output"
 
 _SINGLE_TENSOR_SENTINEL = "__single__"
+
+
+class MLflowPackagingVerificationError(RuntimeError):
+    """Raised when ``verify=True`` fails to load or run the converted package.
+
+    Typically indicates the underlying MLflow model is not self-contained:
+    a required class definition is missing from the pinned environment, the
+    embedded artifacts are incomplete, or a pickle dependency does not match.
+    The original exception is kept as ``__cause__``.
+    """
 
 # MLflow DataType → numpy dtype token used in FNNX Array[...].
 _SCALAR_DTYPE_MAP: dict[str, str] = {
@@ -602,9 +613,12 @@ class MLflowConverter:
         try:
             self._save(output_path)
         finally:
-            if self._tempdir is not None:
-                shutil.rmtree(self._tempdir, ignore_errors=True)
-                self._tempdir = None
+            self._cleanup_tempdir()
+
+    def _cleanup_tempdir(self) -> None:
+        if self._tempdir is not None:
+            shutil.rmtree(self._tempdir, ignore_errors=True)
+            self._tempdir = None
 
     def _save(self, output_path: str) -> None:
         info = self._info
@@ -709,6 +723,118 @@ def _needs_output_permissive_dtype(specs: list[NDJSON | JSON]) -> bool:
     )
 
 
+_MLFLOW_VERIFY_SKIPPED_HINT = (
+    "verification skipped: mlflow is not installed in the current environment; "
+    "install `fnnx[mlflow]` to verify"
+)
+
+
+def _example_to_fnnx_inputs(
+    example: Any, input_mode: str, cfg: dict
+) -> dict[str, Any]:
+    """Convert an MLflow input example into the wrapper's expected ``inputs`` dict.
+
+    Inverse of ``MLflowModel._build_payload``: a DataFrame becomes per-column
+    arrays (columns mode), a numpy ndarray or a dict of arrays becomes the
+    tensor payload, and anything else is wrapped under ``data`` for the
+    json/passthrough modes.
+    """
+    if input_mode == "columns":
+        column_order = cfg.get("column_order") or []
+        pd = sys.modules.get("pandas")
+        if pd is not None and isinstance(example, pd.DataFrame):
+            cols = column_order or list(example.columns)
+            return {c: example[c].to_numpy() for c in cols}
+        if isinstance(example, dict):
+            cols = column_order or list(example.keys())
+            return {c: example[c] for c in cols}
+        if isinstance(example, list):
+            # list-of-records → reconstruct a per-column dict
+            cols = column_order or (list(example[0].keys()) if example else [])
+            return {c: [row[c] for row in example] for c in cols}
+        raise TypeError(
+            f"Cannot convert input example of type {type(example).__name__!r} "
+            f"to columns-mode inputs"
+        )
+
+    if input_mode == "tensor":
+        tensor_names = cfg.get("tensor_names") or []
+        if tensor_names == [_SINGLE_TENSOR_SENTINEL]:
+            return {"input": example}
+        if isinstance(example, dict):
+            return {n: example[n] for n in tensor_names if n in example}
+        if len(tensor_names) == 1:
+            return {tensor_names[0]: example}
+        raise TypeError(
+            f"Tensor-mode input example must be a dict for named tensors, "
+            f"got {type(example).__name__!r}"
+        )
+
+    # json / passthrough
+    return {"data": example}
+
+
+def _verify_package(
+    output_path: str, local_dir: str, info: MLModelInfo, input_mode: str, cfg: dict
+) -> None:
+    """Smoke-test the converted package via ``fnnx.Runtime``.
+
+    Loads the package (triggering ``warmup`` → ``mlflow.pyfunc.load_model``) and,
+    when the source MLflow model has an ``input_example``, runs one ``compute``
+    using that example as the inputs. Any failure is re-raised as
+    ``MLflowPackagingVerificationError`` with a self-containment hint.
+    """
+    try:
+        import mlflow  # noqa: F401
+    except ImportError:
+        console.warn(_MLFLOW_VERIFY_SKIPPED_HINT)
+        return
+
+    from fnnx.runtime import Runtime
+
+    try:
+        rt = Runtime(output_path)
+    except Exception as e:
+        raise MLflowPackagingVerificationError(
+            f"Failed to load the converted package via fnnx.Runtime: {e}. "
+            "The MLflow model may not be self-contained (e.g. a class "
+            "defined in a local module is missing from the pinned "
+            "requirements; re-log with `code_paths=[…]`)."
+        ) from e
+
+    if not info.saved_input_example_info:
+        return
+
+    try:
+        import mlflow.models  # type: ignore[import-not-found]
+
+        source = mlflow.models.Model.load(local_dir)
+        example = source.load_input_example(local_dir)
+    except Exception as e:
+        raise MLflowPackagingVerificationError(
+            f"Failed to load the saved input example from {local_dir!r}: {e}"
+        ) from e
+
+    if example is None:
+        return
+
+    try:
+        inputs = _example_to_fnnx_inputs(example, input_mode, cfg)
+    except Exception as e:
+        raise MLflowPackagingVerificationError(
+            f"Failed to convert the saved input example into FNNX inputs: {e}"
+        ) from e
+
+    try:
+        rt.compute(inputs, {})
+    except Exception as e:
+        raise MLflowPackagingVerificationError(
+            f"Round-trip compute on the saved input example failed: {e}. "
+            "Current-env smoke tests only prove portability to the extent the "
+            "current env matches the target env."
+        ) from e
+
+
 def package_mlflow_model(
     model_uri: str,
     output_path: str,
@@ -738,14 +864,19 @@ def package_mlflow_model(
         extra_pip_dependencies=extra_pip_dependencies,
         producer_tags=producer_tags,
     )
-    converter.save(output_path)
-
-    if verify:
-        # Task 4 lands the verification implementation. We keep the parameter
-        # here so the public signature is final and so Task 3 callers don't
-        # silently get the wrong behavior — surface a clear message.
-        console.warn(
-            "verify=True was passed, but verification is not yet implemented "
-            "(landing in a follow-up task). The package was written; load it "
-            "with fnnx.Runtime to smoke-test manually."
-        )
+    try:
+        converter._save(output_path)
+        if verify:
+            info = converter.info
+            _, input_mode, cfg_fragment, _ = _map_input_schema(
+                info.signature_inputs
+            )
+            _, param_names = _map_params(info.signature_params)
+            cfg: dict = {"model_dir": "mlflow_model"}
+            cfg.update(cfg_fragment)
+            cfg["param_names"] = param_names
+            _verify_package(
+                output_path, converter.local_dir, info, input_mode, cfg
+            )
+    finally:
+        converter._cleanup_tempdir()
