@@ -16,10 +16,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import tempfile
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from fnnx import __version__ as fnnx_version
 from fnnx.console import console
+from fnnx.extras.builder import PyfuncBuilder, PyFuncSpec
 from fnnx.extras.pydantic_models.manifest import NDJSON, JSON, Var
 from fnnx.extras.pydantic_models.meta import MetaEntry
 
@@ -97,12 +101,15 @@ def _load_model_info_mlflow(local_dir: str) -> MLModelInfo:
     signature_outputs: list[dict] | None = None
     signature_params: list[dict] | None = None
     if sig is not None:
+        # to_json() + json.loads matches what MLflow itself writes into the
+        # MLmodel signature strings — tuples become lists — so the result
+        # equals what the YAML reader produces.
         if sig.inputs is not None:
-            signature_inputs = sig.inputs.to_dict()
+            signature_inputs = json.loads(sig.inputs.to_json())
         if sig.outputs is not None:
-            signature_outputs = sig.outputs.to_dict()
+            signature_outputs = json.loads(sig.outputs.to_json())
         if sig.params is not None:
-            signature_params = sig.params.to_dict()
+            signature_params = json.loads(sig.params.to_json())
 
     return MLModelInfo(
         flavors=dict(m.flavors or {}),
@@ -515,3 +522,230 @@ def emit_warnings(messages: list[str]) -> None:
     """Surface a list of warning strings through fnnx.console."""
     for msg in messages:
         console.warn(msg)
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
+
+
+_MLFLOW_REMOTE_HINT = (
+    "Resolving non-local MLflow URIs requires the `mlflow` package. "
+    "Install it with `pip install fnnx[mlflow]` (or `pip install mlflow>=3.4`)."
+)
+
+
+def _resolve_model_uri(model_uri: str) -> tuple[str, str | None]:
+    """Resolve ``model_uri`` to a local directory.
+
+    Returns ``(local_dir, tempdir_to_cleanup)``. ``tempdir_to_cleanup`` is
+    non-None only when a remote URI was downloaded and the caller must remove
+    it after ``.save()``.
+    """
+    if os.path.isdir(model_uri):
+        return model_uri, None
+
+    try:
+        import mlflow.artifacts  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise ImportError(
+            f"{_MLFLOW_REMOTE_HINT} (triggered by model_uri={model_uri!r})"
+        ) from e
+
+    tmp_root = tempfile.mkdtemp(prefix="fnnx_mlflow_")
+    try:
+        local_dir = mlflow.artifacts.download_artifacts(
+            artifact_uri=model_uri, dst_path=tmp_root
+        )
+    except Exception:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+        raise
+    return local_dir, tmp_root
+
+
+class MLflowConverter:
+    """Build an FNNX pyfunc-variant package from an MLflow model directory."""
+
+    def __init__(
+        self,
+        model_uri: str,
+        *,
+        name: str | None = None,
+        version: str | None = None,
+        description: str | None = None,
+        input_specs: list[NDJSON | JSON] | None = None,
+        output_specs: list[NDJSON | JSON] | None = None,
+        extra_pip_dependencies: list[str] | None = None,
+        producer_tags: list[str] | None = None,
+    ) -> None:
+        self._model_uri = model_uri
+        self._name = name
+        self._version = version
+        self._description = description
+        self._input_specs_override = input_specs
+        self._output_specs_override = output_specs
+        self._extra_pip_dependencies = list(extra_pip_dependencies or [])
+        self._user_producer_tags = list(producer_tags or [])
+
+        self._local_dir, self._tempdir = _resolve_model_uri(model_uri)
+        self._info = _load_model_info(self._local_dir)
+
+    @property
+    def info(self) -> MLModelInfo:
+        return self._info
+
+    @property
+    def local_dir(self) -> str:
+        return self._local_dir
+
+    def save(self, output_path: str) -> None:
+        try:
+            self._save(output_path)
+        finally:
+            if self._tempdir is not None:
+                shutil.rmtree(self._tempdir, ignore_errors=True)
+                self._tempdir = None
+
+    def _save(self, output_path: str) -> None:
+        info = self._info
+
+        input_specs_auto, input_mode, cfg_fragment, input_warnings = (
+            _map_input_schema(info.signature_inputs)
+        )
+        output_specs_auto, _ = _map_output_schema()
+        param_vars, param_names = _map_params(info.signature_params)
+
+        python_version, build_deps, runtime_deps = _map_env(
+            self._local_dir, flavors=info.flavors
+        )
+
+        cfg: dict[str, Any] = {"model_dir": "mlflow_model"}
+        cfg.update(cfg_fragment)
+        cfg["param_names"] = param_names
+
+        builder = PyfuncBuilder(
+            pyfunc=PyFuncSpec(
+                filepath=_mlflow_wrapper_filepath(),
+                class_name="MLflowModel",
+            ),
+            model_name=self._name,
+            model_version=self._version,
+            model_description=self._description,
+            create_meta_callback=create_meta_callback(
+                info, input_mode, producer_version=fnnx_version
+            ),
+            python_version=python_version,
+        )
+
+        primary_flavor = info.primary_flavor
+        producer_tags = ["mlflow", primary_flavor]
+        if info.mlflow_version:
+            producer_tags.append(f"mlflow=={info.mlflow_version}")
+        producer_tags.extend(self._user_producer_tags)
+        builder.set_producer_info(
+            name="fnnx.extras.mlflow",
+            version=fnnx_version,
+            tags=producer_tags,
+        )
+
+        input_specs = (
+            self._input_specs_override
+            if self._input_specs_override is not None
+            else input_specs_auto
+        )
+        output_specs = (
+            self._output_specs_override
+            if self._output_specs_override is not None
+            else output_specs_auto
+        )
+
+        if _needs_input_permissive_dtype(input_specs):
+            builder.define_dtype(_PERMISSIVE_INPUT_DTYPE, {})
+        if _needs_output_permissive_dtype(output_specs):
+            builder.define_dtype(_PERMISSIVE_OUTPUT_DTYPE, {})
+
+        for spec in input_specs:
+            builder.add_input(spec)
+        for spec in output_specs:
+            builder.add_output(spec)
+        for var in param_vars:
+            builder.add_dynamic_attribute(var)
+
+        builder.set_extra_values({"fnnx_mlflow": cfg})
+
+        for dep in build_deps:
+            builder.add_build_dependency(dep)
+        for dep in runtime_deps:
+            builder.add_runtime_dependency(dep)
+        for dep in self._extra_pip_dependencies:
+            builder.add_runtime_dependency(dep)
+        builder.add_fnnx_runtime_dependency()
+
+        builder.add_file(self._local_dir, "mlflow_model")
+
+        builder.save(output_path)
+
+        warnings = list(input_warnings)
+        warnings.extend(_self_containment_warnings(info, self._local_dir))
+        emit_warnings(warnings)
+
+
+def _mlflow_wrapper_filepath() -> str:
+    """Return the absolute path to the shipped ``MLflowModel`` wrapper."""
+    from fnnx.extras import _mlflow_wrapper
+
+    return _mlflow_wrapper.__file__
+
+
+def _needs_input_permissive_dtype(specs: list[NDJSON | JSON]) -> bool:
+    return any(
+        getattr(s, "dtype", None) == _PERMISSIVE_INPUT_DTYPE for s in specs
+    )
+
+
+def _needs_output_permissive_dtype(specs: list[NDJSON | JSON]) -> bool:
+    return any(
+        getattr(s, "dtype", None) == _PERMISSIVE_OUTPUT_DTYPE for s in specs
+    )
+
+
+def package_mlflow_model(
+    model_uri: str,
+    output_path: str,
+    *,
+    name: str | None = None,
+    version: str | None = None,
+    description: str | None = None,
+    input_specs: list[NDJSON | JSON] | None = None,
+    output_specs: list[NDJSON | JSON] | None = None,
+    extra_pip_dependencies: list[str] | None = None,
+    producer_tags: list[str] | None = None,
+    verify: bool = False,
+) -> None:
+    """Convert an MLflow model into an FNNX pyfunc-variant package.
+
+    ``model_uri`` can be a local directory or any MLflow URI (``runs:/…``,
+    ``models:/…``, ``file:/…``, ``s3://…``). Local directories are packaged
+    without importing ``mlflow``; remote URIs require ``fnnx[mlflow]``.
+    """
+    converter = MLflowConverter(
+        model_uri,
+        name=name,
+        version=version,
+        description=description,
+        input_specs=input_specs,
+        output_specs=output_specs,
+        extra_pip_dependencies=extra_pip_dependencies,
+        producer_tags=producer_tags,
+    )
+    converter.save(output_path)
+
+    if verify:
+        # Task 4 lands the verification implementation. We keep the parameter
+        # here so the public signature is final and so Task 3 callers don't
+        # silently get the wrong behavior — surface a clear message.
+        console.warn(
+            "verify=True was passed, but verification is not yet implemented "
+            "(landing in a follow-up task). The package was written; load it "
+            "with fnnx.Runtime to smoke-test manually."
+        )

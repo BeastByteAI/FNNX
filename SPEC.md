@@ -682,11 +682,11 @@ permissive `data` input) rather than per-column NDJSON.
         (`pytest.importorskip("mlflow")`) asserting the mlflow and YAML readers produce equal
         `MLModelInfo` for a saved model.
 
-- [ ] **Task 3 — `package_mlflow_model` orchestrator + packaging + pyproject deps.**
-  - [ ] In `src/python/pyproject.toml`: add `pyyaml>=5.1` to the `extras` group, and add both
+- [x] **Task 3 — `package_mlflow_model` orchestrator + packaging + pyproject deps.**
+  - [x] In `src/python/pyproject.toml`: add `pyyaml>=5.1` to the `extras` group, and add both
         `pyyaml>=5.1` and a `mlflow>=3.4` optional group + `mlflow>=3.4` to the `test`
         group.
-  - [ ] Implement `MLflowConverter` and `package_mlflow_model` in `fnnx/extras/mlflow.py`:
+  - [x] Implement `MLflowConverter` and `package_mlflow_model` in `fnnx/extras/mlflow.py`:
         resolve the model — **local dir → use directly, no mlflow import**; **non-local URI →
         lazy `import mlflow` (friendly `ImportError` if missing) + `download_artifacts`**.
         Call `_load_model_info` (Task 2) and the mappers, drive `PyfuncBuilder`
@@ -695,12 +695,12 @@ permissive `data` input) rather than per-column NDJSON.
         `add_file(local_dir, "mlflow_model")`, env deps, `python_version`,
         `create_meta_callback`), then `save`. Emit self-containment warnings. Clean up temp
         dir (only created for URIs).
-  - [ ] Export `package_mlflow_model` from `fnnx.extras.mlflow`.
-  - [ ] Integration test in `src/python/tests/test_mlflow_e2e.py`: train a tiny sklearn
+  - [x] Export `package_mlflow_model` from `fnnx.extras.mlflow`.
+  - [x] Integration test in `src/python/tests/test_mlflow_e2e.py`: train a tiny sklearn
         model (fixed seed, ~20 rows) with an inferred signature, `mlflow.sklearn.save_model`
         to a temp dir, `package_mlflow_model`, load with `fnnx.Runtime`, run `compute`, and
         assert outputs equal the original `model.predict`. `pytest.importorskip("mlflow")`.
-  - [ ] No-mlflow test in the same file: save a model with mlflow, then set
+  - [x] No-mlflow test in the same file: save a model with mlflow, then set
         `sys.modules["mlflow"] = None` (monkeypatch) and assert `package_mlflow_model(local_dir,
         out)` (no `verify`) succeeds, produces a loadable package, and that a non-local
         `model_uri` under the same condition raises `ImportError`. Restore `sys.modules` after.

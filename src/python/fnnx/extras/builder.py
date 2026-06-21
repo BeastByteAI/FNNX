@@ -126,10 +126,15 @@ class PyfuncBuilder:
     def set_extra_values(self, values: dict) -> None:
         self._extra_values = values.copy()
 
-    def define_dtype(self, name: str, dtype: Type[PydanticBaseModel]) -> None:
+    def define_dtype(
+        self, name: str, dtype: Type[PydanticBaseModel] | dict
+    ) -> None:
         if not name.startswith("ext::"):
             raise ValueError("dtype name must start with 'ext::'")
-        self._extra_dtypes[name] = dtype.model_json_schema()
+        if isinstance(dtype, dict):
+            self._extra_dtypes[name] = dtype
+        else:
+            self._extra_dtypes[name] = dtype.model_json_schema()
 
     def set_producer_info(
         self, name: str, version: str, tags: list[str] | None = None
