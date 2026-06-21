@@ -767,9 +767,9 @@ permissive `data` input) rather than per-column NDJSON.
         embedded model-code `.py` is present, no code-availability warning, and a round-trip
         `compute` reproduces direct invocation of the runnable/graph on the same input.
 
-- [ ] **Task 9 — Prophet time-series e2e (datetime → json mode).**
-  - [ ] Add `prophet` to the `test` optional-dependency group in `src/python/pyproject.toml`.
-  - [ ] Integration test in `src/python/tests/test_mlflow_prophet.py`
+- [x] **Task 9 — Prophet time-series e2e (datetime → json mode).**
+  - [x] Add `prophet` to the `test` optional-dependency group in `src/python/pyproject.toml`.
+  - [x] Integration test in `src/python/tests/test_mlflow_prophet.py`
         (`pytest.importorskip("prophet")` + mlflow): fit a tiny prophet model on a small
         fixed `ds`/`y` dataframe, `mlflow.prophet.save_model` with an inferred signature,
         `package_mlflow_model`, load via `fnnx.Runtime`, assert `input_mode="json"` (driven by
