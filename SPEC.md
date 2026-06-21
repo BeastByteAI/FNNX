@@ -754,14 +754,14 @@ permissive `data` input) rather than per-column NDJSON.
         - [x] Save the **same** model **without** `code_paths` → assert a self-containment
               warning is emitted and the embedded dir has no `code/` directory.
 
-- [ ] **Task 8 — LangChain / LangGraph models-from-code e2e (offline).**
-  - [ ] Add `langchain`, `langchain-core`, and `langgraph` to the `test` optional-dependency
+- [x] **Task 8 — LangChain / LangGraph models-from-code e2e (offline).**
+  - [x] Add `langchain`, `langchain-core`, and `langgraph` to the `test` optional-dependency
         group in `src/python/pyproject.toml`.
-  - [ ] Add models-from-code fixture scripts under `src/python/tests/_mlflow_fixtures/`
+  - [x] Add models-from-code fixture scripts under `src/python/tests/_mlflow_fixtures/`
         (`langchain_model.py`, `langgraph_model.py`), each building a deterministic **offline**
         runnable/graph (pure `RunnableLambda` or `FakeListChatModel`; trivial `StateGraph` with
         a pure node) and calling `mlflow.models.set_model(...)`.
-  - [ ] Integration tests in `src/python/tests/test_mlflow_langchain.py`
+  - [x] Integration tests in `src/python/tests/test_mlflow_langchain.py`
         (`pytest.importorskip` for `mlflow`, `langchain_core`, `langgraph`): log each via
         models-from-code, `package_mlflow_model`, load via `fnnx.Runtime`, and assert the
         embedded model-code `.py` is present, no code-availability warning, and a round-trip
