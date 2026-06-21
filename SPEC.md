@@ -741,17 +741,17 @@ permissive `data` input) rather than per-column NDJSON.
         `model.predict` exactly, env pins the framework, and no self-containment warning is
         emitted. `pytest.importorskip("mlflow")` + `pytest.importorskip("<framework>")`.
 
-- [ ] **Task 7 — PyTorch e2e incl. nn.Module outside `__main__`.**
-  - [ ] Add `torch` to the `test` optional-dependency group in `src/python/pyproject.toml`.
-  - [ ] Add the fixture module `src/python/tests/_mlflow_fixtures/torch_net.py` defining a
+- [x] **Task 7 — PyTorch e2e incl. nn.Module outside `__main__`.**
+  - [x] Add `torch` to the `test` optional-dependency group in `src/python/pyproject.toml`.
+  - [x] Add the fixture module `src/python/tests/_mlflow_fixtures/torch_net.py` defining a
         tiny `nn.Module` (e.g. one `nn.Linear`), and an `__init__.py` if needed for import.
-  - [ ] Integration tests in `src/python/tests/test_mlflow_torch.py`
+  - [x] Integration tests in `src/python/tests/test_mlflow_torch.py`
         (`pytest.importorskip("torch")` + mlflow):
-        - [ ] Save the model with `mlflow.pytorch.save_model(..., code_paths=[torch_net.py])`
+        - [x] Save the model with `mlflow.pytorch.save_model(..., code_paths=[torch_net.py])`
               and a `TensorSpec(float32, [-1, n])` signature → package → `fnnx.Runtime`
               round-trip equals `model(x)` (`np.allclose`); assert `mlflow_model/code/` is
               embedded and **no** code-availability warning.
-        - [ ] Save the **same** model **without** `code_paths` → assert a self-containment
+        - [x] Save the **same** model **without** `code_paths` → assert a self-containment
               warning is emitted and the embedded dir has no `code/` directory.
 
 - [ ] **Task 8 — LangChain / LangGraph models-from-code e2e (offline).**
