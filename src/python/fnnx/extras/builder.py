@@ -48,6 +48,7 @@ class PyfuncBuilder:
         model_version: str | None = None,
         model_description: str | None = None,
         create_meta_callback: Callable | None = None,
+        python_version: str | None = None,
     ) -> None:
         self._inputs: list[NDJSON | JSON] = []
         self._outputs: list[NDJSON | JSON] = []
@@ -70,6 +71,8 @@ class PyfuncBuilder:
 
         self._build_dependencies = []
         self._rt_dependencies = []
+
+        self._python_version = python_version
 
         self.create_meta_callback = create_meta_callback
 
@@ -262,10 +265,11 @@ class PyfuncBuilder:
         self.add_runtime_dependency(f"{dependency_name}=={fnnx_version}")
 
     def _make_env(self):
+        python_version = self._python_version or PYTHON_VERSION
         return {
             "python3::conda_pip": asdict(
                 Python3_CondaPip(
-                    python_version=PYTHON_VERSION,
+                    python_version=python_version,
                     build_dependencies=self._build_dependencies,
                     dependencies=[PipDependency(package=p) for p in self._rt_dependencies],
                 )
