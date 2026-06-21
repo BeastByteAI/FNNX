@@ -730,10 +730,10 @@ permissive `data` input) rather than per-column NDJSON.
               dynamic attribute reaches `predict(..., params=...)`.
         `pytest.importorskip("mlflow")`.
 
-- [ ] **Task 6 — Gradient-boosting framework e2e (XGBoost, LightGBM, CatBoost).**
-  - [ ] Add `xgboost`, `lightgbm`, `catboost`, `pandas`, and `scikit-learn` to the `test`
+- [x] **Task 6 — Gradient-boosting framework e2e (XGBoost, LightGBM, CatBoost).**
+  - [x] Add `xgboost`, `lightgbm`, `catboost`, `pandas`, and `scikit-learn` to the `test`
         optional-dependency group in `src/python/pyproject.toml`.
-  - [ ] Integration tests in `src/python/tests/test_mlflow_frameworks.py` (one parametrized
+  - [x] Integration tests in `src/python/tests/test_mlflow_frameworks.py` (one parametrized
         test or one per framework): train a tiny classifier (fixed seed, ~20 rows, few
         estimators; `allow_writing_files=False` for catboost) on a pandas DataFrame, infer a
         signature, `mlflow.<flavor>.save_model`, `package_mlflow_model`, load via
