@@ -19,26 +19,45 @@ jobs:
        contains(github.ref, 'py_v'))
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        # 3.11-3.13 run the full suite. 3.10 and 3.14 install only the lean
+        # essential deps and skip the extra tests (`test_extra_*`, which cover
+        # the optional mlflow converter and ML frameworks).
+        include:
+          - python-version: "3.10"
+            extras: test-essential
+            pytest-args: "--ignore-glob='*test_extra_*'"
+          - python-version: "3.11"
+            extras: test
+            pytest-args: ""
+          - python-version: "3.12"
+            extras: test
+            pytest-args: ""
+          - python-version: "3.13"
+            extras: test
+            pytest-args: ""
+          - python-version: "3.14"
+            extras: test-essential
+            pytest-args: "--ignore-glob='*test_extra_*'"
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: '**/pyproject.toml'
-          
+
       - name: Install dependencies
         run: |
-          pip install -e 'src/python[core,test]'
-          
+          pip install -e "src/python[core,${{ matrix.extras }}]"
+
       - name: Run tests
         working-directory: src/python
         run: |
-          python -m unittest discover tests
+          pytest tests ${{ matrix.pytest-args }}
 
   deploy:
     runs-on: ubuntu-latest

@@ -17,10 +17,19 @@ classifiers = [
 core = ["numpy>=1.0.0,<3.0.0", "onnxruntime>=1.0.0,<2.0.0"]
 extras = ["pydantic>=2.0.0,<3.0.0", "pyyaml>=5.1"]
 mlflow = ["mlflow>=3.4"]
-test = [
+# Essential test deps: only the pure FNNX core (format/runtime/validators),
+# no mlflow converter and no ML frameworks. Drives the 3.10 / 3.14 CI legs,
+# which skip the extra suite (the `test_extra_*` files); see the test workflow.
+test-essential = [
     "jsonschema>=4.0.0,<5.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "pyyaml>=5.1",
+    "pytest>=9.1.1",
+]
+# Full test deps: essential + the mlflow converter (extra) and every ML
+# framework it integrates with. Drives the 3.11-3.13 CI legs.
+test = [
+    "fnnx[test-essential]",
     "mlflow>=3.4",
     "scikit-learn>=1.0.0",
     "pandas>=1.0.0",
@@ -33,5 +42,7 @@ test = [
     "langgraph>=0.2.0",
     "prophet>=1.1.0",
     "tensorflow>=2.12.0",
-    "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
