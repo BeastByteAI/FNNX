@@ -73,13 +73,11 @@ def _save_pytorch_model(tmp: str, *, with_code_paths: bool):
     )
 
     model_dir = os.path.join(tmp, "torch_model")
-    kwargs: dict = {
-        "signature": signature,
-        # Force pickle (by-reference) so the by-reference self-containment
-        # heuristic is exercised. ``pt2`` is a traced-graph format and would
-        # not be a pickle dependency.
-        "serialization_format": "pickle",
-    }
+    # mlflow.pytorch always serializes via torch.save (pickle, by-reference),
+    # which is exactly what exercises the by-reference self-containment
+    # heuristic. (There is no `serialization_format` arg on this flavor — it
+    # belongs to mlflow.sklearn — and passing it raises in torch.save.)
+    kwargs: dict = {"signature": signature}
     if with_code_paths:
         kwargs["code_paths"] = [os.path.join(_FIXTURES_DIR, "torch_net.py")]
     mlflow.pytorch.save_model(model, model_dir, **kwargs)  # type: ignore[attr-defined]

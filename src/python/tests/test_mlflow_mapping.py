@@ -29,6 +29,7 @@ from fnnx.extras.mlflow import (
     _map_input_schema,
     _map_output_schema,
     _map_params,
+    _normalize_shape,
     _parse_requirements_txt,
     _parse_signature_field,
     _self_containment_warnings,
@@ -84,7 +85,7 @@ class TestMapInputSchemaColumns(unittest.TestCase):
         for spec in specs:
             assert isinstance(spec, NDJSON)
             self.assertEqual(spec.dtype, "Array[float64]")
-            self.assertEqual(spec.shape, [-1])
+            self.assertEqual(spec.shape, ["batch"])
 
     def test_columns_unnamed_get_col_index_names(self):
         entries = [{"type": "long"}, {"type": "long"}]
@@ -117,6 +118,32 @@ class TestMapInputSchemaColumns(unittest.TestCase):
             )
 
 
+class TestNormalizeShape(unittest.TestCase):
+    """Variable dims must become named strings, never the literal int -1.
+
+    FNNX's shape validator matches int dims exactly and treats string dims as
+    wildcards, so a -1 would mean "must equal -1" and reject every real input.
+    """
+
+    def test_variable_dims_become_strings(self):
+        self.assertEqual(_normalize_shape([-1, 4]), ["batch", 4])
+        self.assertEqual(_normalize_shape([None, 3]), ["batch", 3])
+        self.assertEqual(_normalize_shape([-1]), ["batch"])
+        self.assertEqual(_normalize_shape(None), ["batch"])
+
+    def test_inner_variable_dims_named_by_index(self):
+        # leading variable dim -> "batch"; inner variable dims -> "dim_<i>"
+        self.assertEqual(_normalize_shape([-1, -1, 8]), ["batch", "dim_1", 8])
+        self.assertEqual(_normalize_shape([5, None]), [5, "dim_1"])
+
+    def test_no_literal_minus_one_emitted(self):
+        for shape in ([-1, 4], [None, 3], [-1], [-1, -1, 8], [5, None]):
+            self.assertNotIn(-1, _normalize_shape(shape))
+
+    def test_static_dims_preserved_as_ints(self):
+        self.assertEqual(_normalize_shape([2, 3, 4]), [2, 3, 4])
+
+
 class TestMapInputSchemaTensor(unittest.TestCase):
     def test_single_unnamed_tensor(self):
         entries = [
@@ -135,7 +162,7 @@ class TestMapInputSchemaTensor(unittest.TestCase):
         assert isinstance(specs[0], NDJSON)
         self.assertEqual(specs[0].name, "input")
         self.assertEqual(specs[0].dtype, "Array[float32]")
-        self.assertEqual(specs[0].shape, [-1, 4])
+        self.assertEqual(specs[0].shape, ["batch", 4])
 
     def test_multiple_named_tensors(self):
         entries = [
@@ -159,10 +186,10 @@ class TestMapInputSchemaTensor(unittest.TestCase):
         self.assertEqual(names, ["a", "b"])
         assert isinstance(specs[0], NDJSON)
         self.assertEqual(specs[0].dtype, "Array[float32]")
-        self.assertEqual(specs[0].shape, [-1, 3])
+        self.assertEqual(specs[0].shape, ["batch", 3])
         assert isinstance(specs[1], NDJSON)
         self.assertEqual(specs[1].dtype, "Array[int64]")
-        self.assertEqual(specs[1].shape, [-1])
+        self.assertEqual(specs[1].shape, ["batch"])
 
 
 class TestMapInputSchemaJson(unittest.TestCase):
@@ -520,11 +547,12 @@ class TestMetaPayload(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         entry = entries[0]
         self.assertEqual(entry["id"], "mlflow-source")
-        self.assertEqual(entry["producer"], "fnnx.extras.mlflow")
+        self.assertEqual(entry["producer"], "fnnx.ai")
         self.assertEqual(entry["producer_version"], "0.0.99")
-        self.assertIn("mlflow", entry["producer_tags"])
-        self.assertIn("sklearn", entry["producer_tags"])
-        self.assertIn("mlflow==3.4.0", entry["producer_tags"])
+        # No auto-added tags; flavor/version live in the payload instead.
+        self.assertEqual(entry["producer_tags"], [])
+        self.assertIn("sklearn", entry["payload"]["flavors"])
+        self.assertEqual(entry["payload"]["mlflow_version"], "3.4.0")
         self.assertEqual(entry["payload"]["input_mode"], "columns")
         self.assertEqual(entry["payload"]["loader_module"], "mlflow.sklearn")
 

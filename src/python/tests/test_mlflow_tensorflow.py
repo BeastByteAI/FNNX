@@ -107,12 +107,12 @@ class TestKerasNamedTensorRoundTrip(unittest.TestCase):
             spec_a = specs_by_name["a"]
             self.assertEqual(spec_a["content_type"], "NDJSON")
             self.assertEqual(spec_a["dtype"], "Array[float32]")
-            self.assertEqual(spec_a["shape"], [-1, N_FEATURES_A])
+            self.assertEqual(spec_a["shape"], ["batch", N_FEATURES_A])
 
             spec_b = specs_by_name["b"]
             self.assertEqual(spec_b["content_type"], "NDJSON")
             self.assertEqual(spec_b["dtype"], "Array[float32]")
-            self.assertEqual(spec_b["shape"], [-1, N_FEATURES_B])
+            self.assertEqual(spec_b["shape"], ["batch", N_FEATURES_B])
 
             rt = Runtime(out)
             result = rt.compute({"a": sample_a, "b": sample_b}, {})

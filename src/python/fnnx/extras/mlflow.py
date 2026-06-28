@@ -275,14 +275,25 @@ def _map_tensor_inputs(
     return specs, "tensor", cfg, []
 
 
+_BATCH_DIM = "batch"
+
+
 def _normalize_shape(shape: Any) -> list[str | int]:
-    """Convert an MLflow shape list to FNNX shape (None/-1 stay as -1)."""
+    """Convert an MLflow tensor shape into an FNNX shape.
+
+    MLflow encodes a variable dimension as ``-1`` or ``None``. FNNX matches an
+    int dim by exact equality and treats a *string* dim as a wildcard, so a
+    variable dim must be emitted as a named string — never the literal int
+    ``-1`` (which the runtime would require the input to literally equal). The
+    leading variable dim becomes ``"batch"``; any other variable dim becomes
+    ``"dim_<i>"``.
+    """
     if shape is None:
-        return [-1]
+        return [_BATCH_DIM]
     out: list[str | int] = []
-    for dim in shape:
-        if dim is None:
-            out.append(-1)
+    for i, dim in enumerate(shape):
+        if dim is None or int(dim) < 0:
+            out.append(_BATCH_DIM if i == 0 else f"dim_{i}")
         else:
             out.append(int(dim))
     return out
@@ -301,7 +312,7 @@ def _map_columns_inputs(
                 name=name,
                 content_type="NDJSON",
                 dtype=f"Array[{token}]",
-                shape=[-1],
+                shape=[_BATCH_DIM],
             )
         )
         column_order.append(name)
@@ -443,16 +454,13 @@ def create_meta_callback(
     The callback writes a single ``mlflow-source`` MetaEntry capturing the
     original MLmodel content for lossless provenance.
     """
-    primary_flavor = info.primary_flavor
-    producer_tags = ["mlflow", primary_flavor]
-    if info.mlflow_version:
-        producer_tags.append(f"mlflow=={info.mlflow_version}")
-
+    # No auto-added tags: the flavor and mlflow version are already captured
+    # losslessly in the payload (``flavors`` / ``mlflow_version``).
     entry = MetaEntry(
         id="mlflow-source",
-        producer="fnnx.extras.mlflow",
+        producer="fnnx.ai",
         producer_version=producer_version,
-        producer_tags=producer_tags,
+        producer_tags=[],
         payload=_build_meta_payload(info, input_mode),
     )
 
@@ -651,15 +659,11 @@ class MLflowConverter:
             python_version=python_version,
         )
 
-        primary_flavor = info.primary_flavor
-        producer_tags = ["mlflow", primary_flavor]
-        if info.mlflow_version:
-            producer_tags.append(f"mlflow=={info.mlflow_version}")
-        producer_tags.extend(self._user_producer_tags)
+        # Only user-supplied tags are added; nothing is auto-injected.
         builder.set_producer_info(
-            name="fnnx.extras.mlflow",
+            name="fnnx.ai",
             version=fnnx_version,
-            tags=producer_tags,
+            tags=list(self._user_producer_tags),
         )
 
         input_specs = (

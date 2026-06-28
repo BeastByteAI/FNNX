@@ -107,6 +107,9 @@ class TestSklearnRoundTrip(unittest.TestCase):
         # Manifest derived from the inferred signature: 2 NDJSON columns.
         self.assertEqual(manifest["variant"], "pyfunc")
         self.assertEqual(manifest["name"], "sklearn-rf")
+        # Producer is fnnx.ai with no auto-injected tags.
+        self.assertEqual(manifest["producer_name"], "fnnx.ai")
+        self.assertEqual(manifest["producer_tags"], [])
         self.assertEqual(len(manifest["inputs"]), 2)
         for spec in manifest["inputs"]:
             self.assertEqual(spec["content_type"], "NDJSON")
@@ -129,7 +132,7 @@ class TestSklearnRoundTrip(unittest.TestCase):
 
         # Meta carries the full MLmodel for lossless provenance.
         self.assertEqual(meta[0]["id"], "mlflow-source")
-        self.assertEqual(meta[0]["producer"], "fnnx.extras.mlflow")
+        self.assertEqual(meta[0]["producer"], "fnnx.ai")
         self.assertEqual(meta[0]["payload"]["input_mode"], "columns")
         self.assertIn("mlmodel", meta[0]["payload"])
 
@@ -152,6 +155,24 @@ class TestSklearnRoundTrip(unittest.TestCase):
 
         deps = [d["package"] for d in env["python3::conda_pip"]["dependencies"]]
         self.assertIn("my-pkg==1.2.3", deps)
+
+    def test_user_producer_tags_flow_through(self):
+        import json
+
+        from fnnx.extras.mlflow import package_mlflow_model
+
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir, _, _ = _save_sklearn_model(tmp)
+            out = os.path.join(tmp, "m.fnnx")
+            package_mlflow_model(model_dir, out, producer_tags=["team-x", "v2"])
+
+            with tarfile.open(out, "r") as tar:
+                manifest = json.loads(
+                    tar.extractfile("manifest.json").read().decode()  # type: ignore[union-attr]
+                )
+
+        # Exactly the user's tags — no auto-injected mlflow/flavor/version tags.
+        self.assertEqual(manifest["producer_tags"], ["team-x", "v2"])
 
 
 class TestNoMlflowEnv(unittest.TestCase):

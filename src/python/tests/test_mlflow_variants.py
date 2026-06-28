@@ -171,7 +171,7 @@ class TestTensorMode(unittest.TestCase):
             self.assertEqual(spec["name"], "input")
             self.assertEqual(spec["content_type"], "NDJSON")
             self.assertEqual(spec["dtype"], "Array[float32]")
-            self.assertEqual(spec["shape"], [-1, 4])
+            self.assertEqual(spec["shape"], ["batch", 4])
 
             rt = Runtime(out)
             sample = X[:5]

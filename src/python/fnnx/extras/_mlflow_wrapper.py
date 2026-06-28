@@ -7,13 +7,58 @@ manifest. This module imports only ``fnnx``; ``mlflow`` is imported lazily in
 importable in environments that lack them.
 """
 
+from contextlib import contextmanager
 from dataclasses import asdict as dataclass_asdict, is_dataclass
+import os
 import sys
 
 from fnnx.variants.pyfunc import PyFunc
 
 
 _SINGLE_TENSOR_SENTINEL = "__single__"
+
+# mlflow reads this at model-load time to choose the prediction device for
+# device-aware flavors (e.g. pytorch). We bridge FNNX's device_map onto it.
+_MLFLOW_DEVICE_ENV = "MLFLOW_DEFAULT_PREDICTION_DEVICE"
+
+
+def _fnnx_device_to_mlflow(accelerator) -> str | None:
+    """Map an FNNX ``device_map`` accelerator to an mlflow prediction device.
+
+    Accepts the ``DeviceMap`` carried by ``Context.device`` or a bare string.
+    Returns ``None`` when there is no actionable device hint (``"auto"`` or an
+    unknown accelerator), leaving mlflow's own auto-detection in charge.
+    """
+    if hasattr(accelerator, "accelerator"):  # a DeviceMap flowed through
+        accelerator = accelerator.accelerator
+    if not isinstance(accelerator, str):
+        return None
+    a = accelerator.strip().lower()
+    if a == "cpu":
+        return "cpu"
+    if a in ("cuda", "gpu"):
+        return "cuda"
+    if a.startswith("cuda:"):
+        return accelerator  # preserve an explicit index, e.g. "cuda:1"
+    return None  # auto / mps / unknown -> let mlflow decide
+
+
+@contextmanager
+def _prediction_device(device: str | None):
+    """Scope ``MLFLOW_DEFAULT_PREDICTION_DEVICE`` to a model load.
+
+    A device already present in the environment wins (an explicit runtime
+    override), and the previous value is always restored so the process
+    environment is never mutated permanently.
+    """
+    if not device or os.environ.get(_MLFLOW_DEVICE_ENV):
+        yield
+        return
+    os.environ[_MLFLOW_DEVICE_ENV] = device
+    try:
+        yield
+    finally:
+        os.environ.pop(_MLFLOW_DEVICE_ENV, None)
 
 
 def _to_jsonable(x):
@@ -71,7 +116,14 @@ class MLflowModel(PyFunc):
             raise FileNotFoundError(
                 f"MLflow model directory '{cfg['model_dir']}' not found in package"
             )
-        self.model = mlflow.pyfunc.load_model(model_dir)
+        # Bridge the FNNX runtime's device_map onto mlflow's load-time device
+        # selection (honored by device-aware flavors such as pytorch). The
+        # default device_map accelerator is "cpu", so a converted model runs on
+        # CPU unless the runtime is given device_map="cuda" (or an explicit
+        # MLFLOW_DEFAULT_PREDICTION_DEVICE env var, which still wins).
+        device = _fnnx_device_to_mlflow(getattr(self.fnnx_context, "device", None))
+        with _prediction_device(device):
+            self.model = mlflow.pyfunc.load_model(model_dir)
 
     def _build_payload(self, inputs: dict):
         cfg = self._cfg

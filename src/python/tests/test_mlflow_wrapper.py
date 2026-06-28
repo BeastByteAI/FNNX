@@ -25,9 +25,12 @@ from fnnx.extras.builder import PyfuncBuilder, PyFuncSpec, PYTHON_VERSION
 
 
 class _FakeContext:
-    def __init__(self, values: dict, dirs: dict | None = None):
+    def __init__(
+        self, values: dict, dirs: dict | None = None, device: object | None = None
+    ):
         self._values = values
         self._dirs = dirs or {}
+        self.device = device
 
     def get_value(self, key):
         return self._values.get(key)
@@ -53,7 +56,7 @@ def _make_wrapper(cfg: dict, model: _RecordingModel) -> MLflowModel:
     ctx = _FakeContext({"fnnx_mlflow": cfg}, dirs={cfg["model_dir"]: "/tmp/fake"})
     wrapper = MLflowModel(cast(Context, ctx))
     wrapper._cfg = cfg
-    wrapper.model = model
+    wrapper.model = model  # type: ignore[assignment]
     return wrapper
 
 
@@ -327,6 +330,84 @@ class TestWarmup(unittest.TestCase):
             wrapper = MLflowModel(cast(Context, ctx))
             with self.assertRaises(FileNotFoundError):
                 wrapper.warmup()
+
+
+class TestWarmupDevice(unittest.TestCase):
+    """The FNNX device_map should drive mlflow's load-time prediction device."""
+
+    def _warmup_with_device(self, device_attr) -> dict:
+        from fnnx.extras._mlflow_wrapper import _MLFLOW_DEVICE_ENV
+
+        seen: dict = {}
+
+        def fake_load(model_dir):
+            seen["dir"] = model_dir
+            seen["env"] = os.environ.get(_MLFLOW_DEVICE_ENV)
+            return "model-obj"
+
+        fake_pyfunc = mock.MagicMock()
+        fake_pyfunc.load_model.side_effect = fake_load
+        fake_mlflow = mock.MagicMock()
+        fake_mlflow.pyfunc = fake_pyfunc
+
+        cfg = {
+            "model_dir": "mlflow_model",
+            "input_mode": "passthrough",
+            "param_names": [],
+        }
+        ctx = _FakeContext(
+            {"fnnx_mlflow": cfg},
+            dirs={"mlflow_model": "/abs/x"},
+            device=device_attr,  # the wrapper reads Context.device
+        )
+
+        with mock.patch.dict(
+            sys.modules, {"mlflow": fake_mlflow, "mlflow.pyfunc": fake_pyfunc}
+        ):
+            wrapper = MLflowModel(cast(Context, ctx))
+            wrapper.warmup()
+        return seen
+
+    def test_cuda_devicemap_sets_env_during_load_and_restores(self):
+        from fnnx.device import DeviceMap
+        from fnnx.extras._mlflow_wrapper import _MLFLOW_DEVICE_ENV
+
+        self.assertNotIn(_MLFLOW_DEVICE_ENV, os.environ)
+        seen = self._warmup_with_device(
+            DeviceMap(accelerator="cuda", node_device_map={})
+        )
+        self.assertEqual(seen["env"], "cuda")
+        # restored after load — process env not leaked
+        self.assertNotIn(_MLFLOW_DEVICE_ENV, os.environ)
+
+    def test_cpu_string_forces_cpu(self):
+        seen = self._warmup_with_device("cpu")
+        self.assertEqual(seen["env"], "cpu")
+
+    def test_cuda_indexed_preserved(self):
+        from fnnx.device import DeviceMap
+
+        seen = self._warmup_with_device(
+            DeviceMap(accelerator="cuda:1", node_device_map={})
+        )
+        self.assertEqual(seen["env"], "cuda:1")
+
+    def test_unknown_accelerator_leaves_env_unset(self):
+        seen = self._warmup_with_device("auto")
+        self.assertIsNone(seen["env"])
+
+    def test_external_env_var_wins(self):
+        from fnnx.device import DeviceMap
+        from fnnx.extras._mlflow_wrapper import _MLFLOW_DEVICE_ENV
+
+        os.environ[_MLFLOW_DEVICE_ENV] = "cuda:3"
+        try:
+            seen = self._warmup_with_device(
+                DeviceMap(accelerator="cpu", node_device_map={})
+            )
+            self.assertEqual(seen["env"], "cuda:3")  # device_map did not override
+        finally:
+            os.environ.pop(_MLFLOW_DEVICE_ENV, None)
 
 
 class TestBuilderPythonVersion(unittest.TestCase):
